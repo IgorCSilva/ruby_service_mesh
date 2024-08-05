@@ -154,11 +154,11 @@ Show kiali dashboard:
 
 
 Overview tab  
-![image]()
+![image](https://raw.githubusercontent.com/IgorCSilva/ruby_service_mesh/nginx_deployment/images/00_istion_home.png)
 
 Traffic Graph tab  
-![image]()
+![image](https://raw.githubusercontent.com/IgorCSilva/ruby_service_mesh/nginx_deployment/images/01_traffic_graph.png)
 
 Mesh tab  
-![image]()
+![image](https://raw.githubusercontent.com/IgorCSilva/ruby_service_mesh/nginx_deployment/images/02_mesh.png)
 
