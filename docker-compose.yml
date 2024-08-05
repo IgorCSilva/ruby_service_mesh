@@ -1,0 +1,8 @@
+version: '3'
+
+services:
+  ruby_service_mesh:
+    build: .
+    container_name: ruby_service_mesh
+    volumes:
+      - .:/app
