@@ -81,3 +81,84 @@ During installation, we can choose which types of configuration we want Istio to
 <br>
 * Local installation is quick but may take a while when in production.
 
+### Sidecar proxy injection
+
+Create the file manifests/deployment.yaml.
+
+``` yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+spec:
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx
+        resources:
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+        ports:
+        - containerPort: 80
+```
+<br>
+Apply it:
+`kubectl apply -f deployment.yaml`
+
+List the pods:
+`kubectl get po`
+
+* here we have only one nginx container running
+
+Let's create a label for the default namespace so Istio knows when to inject the sidecar-proxy:
+`kubectl label namespace default istio-injection=enabled`
+
+Delete the deploy and create again::  
+`kubectl delete deploy nginx`  
+`kubectl apply -f deployment.yaml`
+
+Listing the pods (`kubectl get po`) we see two containers.
+Running the kubernetes describe command (`kubectl describe pod {pod-name}`) we see the istio-proxy creation.
+<br>
+### addons configuration
+
+Github with default addons: [https://github.com/istio/istio/tree/master/samples/addons](https://github.com/istio/istio/tree/master/samples/addons)
+
+Apply Prometheus addon:
+`kubectl apply -f https://raw.githubusercontent.com/istio/istio/master/samples/addons/prometheus.yaml`
+
+Apply kiali addon:
+`kubectl apply -f https://raw.githubusercontent.com/istio/istio/master/samples/addons/kiali.yaml`
+
+Apply jaeger addon:
+`kubectl apply -f https://raw.githubusercontent.com/istio/istio/master/samples/addons/jaeger.yaml`
+
+Apply grafana addon:
+`kubectl apply -f https://raw.githubusercontent.com/istio/istio/master/samples/addons/grafana.yaml`
+
+Again, list pods to see what was installed:
+`kubectl get po -n istio-system`
+
+Show kiali dashboard:
+`istioctl dashboard kiali`
+
+* a web page will open.
+
+
+Overview tab  
+![image]()
+
+Traffic Graph tab  
+![image]()
+
+Mesh tab  
+![image]()
+
