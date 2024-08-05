@@ -1,35 +1,83 @@
 # RubyServiceMesh
 
-TODO: Delete this and the text below, and describe your gem
+A step by stey how to use service mesh with a ruby project.
 
-Welcome to your new gem! In this directory, you'll find the files you need to be able to package up your Ruby library into a gem. Put your Ruby code in the file `lib/ruby_service_mesh`. To experiment with that code, run `bin/console` for an interactive prompt.
+# Starting project
+The initial project has the Dockerfile and docker-compose files to easily start development. You can find a version of this initial project in `starting_project` branch. Get this branch to start this tutorial.
 
-## Installation
+# Tools to install
 
-TODO: Replace `UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG` with your gem name right after releasing it to RubyGems.org. Please do not do it earlier due to security reasons. Alternatively, replace this section with instructions to install your gem from git if you don't plan to release to RubyGems.org.
+## Kubernetes - kubectl
+You need to have kubernetes installed to proceed. With kubernetes you will use kubectl to manage clusters.
 
-Install the gem and add to the application's Gemfile by executing:
+### Install kubectl
+Linux:
+- `snap install kubectl --classic`
+- Check version: `kubectl version --client`
 
-    $ bundle add UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
+## k3d
+We will use Istio to implement service mesh, and a good tool to work with Istio is k3d.
 
-If bundler is not being used to manage dependencies, install the gem by executing:
+### Install k3d
 
-    $ gem install UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
+k3d installation page: https://k3d.io/v5.4.6/#installation
 
-## Usage
+Obs.: For versions of k3d 5.x we need to have docker version 20.10.5. If the Docker version is below this, we must install a version of k3d below 5.x, for example v4.4.8.
 
-TODO: Write usage instructions here
+- Run the command (accordingly your docker version):
+`curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | TAG=v5.4.6 bash`
 
-## Development
+### Create cluster
 
-After checking out the repo, run `bin/setup` to install dependencies. Then, run `rake spec` to run the tests. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
+Run:  
+`k3d cluster create -p "8000:30000@loadbalancer" --agents 2`  
 
-To install this gem onto your local machine, run `bundle exec rake install`. To release a new version, update the version number in `version.rb`, and then run `bundle exec rake release`, which will create a git tag for the version, push git commits and the created tag, and push the `.gem` file to [rubygems.org](https://rubygems.org).
+With this command we have:
 
-## Contributing
+* Redirection of accesses on port 8000 of the machine to port 30000 of the cluster, and port 30000 of the cluster calls the service you want to access.
+* The agents command specifies our 2 nodes.
+* Kubernetes Control-Plane is created
 
-Bug reports and pull requests are welcome on GitHub at https://github.com/[USERNAME]/ruby_service_mesh.
+Change context:
+`kubectl config use-context k3d-k3s-default`
 
-## License
+List cluster's nodes:
+`kubectl get nodes`
 
-The gem is available as open source under the terms of the [MIT License](https://opensource.org/licenses/MIT).
+* Here we have to see two agents and one contro-plane.
+<br>
+Nodes:
+
+| NAME | STATUS | ROLES | AGE | VERSION |
+| ---- | ------ | ----- | --- | ------- |
+| k3d-k3s-default-agent-1 | Ready | \<none> | 10m | v1.24.4+k3s1 |
+| k3d-k3s-default-server-0 | Ready | control-plane,master | 10m | v1.24.4+k3s1 |
+| k3d-k3s-default-agent-0 | Ready | \<none> | 10m | v1.24.4+k3s1 |
+<br>
+
+## Install Istio
+
+Site: [https://istio.io/latest/docs/setup/getting-started/](https://istio.io/latest/docs/setup/getting-started/)
+
+Istio has a CLI called *istioctl*.
+
+Linux:
+- Download Istio:
+`curl -L `[`https://istio.io/downloadIstio`](https://istio.io/downloadIstio)` | sh -`
+
+- Environment variable configuration:
+`sudo nano ~/.bashrc`
+
+* Add at end of file (remenber to put you istio folder path).
+
+`export ISTIO_HOME=~/istio-1.15.0`
+    `export PATH=$PATH:$ISTIO_HOME/bin`
+
+This way we now have access to the `istioctl` command from any part of the computer.
+
+During installation, we can choose which types of configuration we want Istio to have through the profile parameter. Here we will install with the default configuration.
+
+`istioctl install`
+<br>
+* Local installation is quick but may take a while when in production.
+
