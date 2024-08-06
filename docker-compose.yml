@@ -6,3 +6,5 @@ services:
     container_name: ruby_service_mesh
     volumes:
       - .:/app
+    ports:
+      - 8080:4567

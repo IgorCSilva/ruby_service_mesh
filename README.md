@@ -153,12 +153,199 @@ Show kiali dashboard:
 * a web page will open.
 
 
-Overview tab  
+**Overview tab**  
+
 ![image](https://raw.githubusercontent.com/IgorCSilva/ruby_service_mesh/nginx_deployment/images/00_istion_home.png)
 
-Traffic Graph tab  
+**Traffic Graph tab**
+
 ![image](https://raw.githubusercontent.com/IgorCSilva/ruby_service_mesh/nginx_deployment/images/01_traffic_graph.png)
 
-Mesh tab  
+**Mesh tab**
+
 ![image](https://raw.githubusercontent.com/IgorCSilva/ruby_service_mesh/nginx_deployment/images/02_mesh.png)
 
+
+# Create a simple ruby server
+
+First, run the application:  
+`docker-compose up --build`
+
+Get inside the container:  
+`docker exec -it ruby_service_mesh bash`
+
+
+Add `sinatra` and `rackup` in Gemfile.
+
+```ruby
+gem "sinatra", "~> 4.0.0"
+
+gem "rackup", "~> 2.1.0"
+```
+
+Inside the container run the `bundle install`.
+
+Create the routes in app/main.rb:
+
+```ruby
+require "sinatra"
+
+set :bind, "0.0.0.0"
+
+get "/" do
+  "Hello, world! V1"
+end
+
+```
+
+Update the Dockerfile CMD command to start server.
+```dockerfile
+...
+
+CMD ["ruby", "app/main.rb"]
+```
+
+Update docker-compose.yml file to add ports mapping:
+```yaml
+version: '3'
+
+services:
+  ruby_service_mesh:
+    build: .
+    container_name: ruby_service_mesh
+    volumes:
+      - .:/app
+    ports:
+      - 8080:4567
+```
+
+Stop application with Ctrl+C.
+
+Run the application again:  
+`docker-compose up --build`
+
+
+Access `localhost:8080` and you will see a Hello, world! V1 message.
+
+
+## Dockerhub
+Create the first version app image:  
+`docker build -t igoru23/ruby_sinatra:v1 .`
+
+Check if the image is working running the command below an accessing the `localhost:8080` url:  
+`docker run --rm -p 8080:4567 igoru23/ruby_sinatra:v1`
+
+Push image to dockerhub:  
+`docker push igoru23/ruby_sinatra:v1`
+
+Now, you can see the app image in dockerhub.
+
+![dockerhub app version 1](https://raw.githubusercontent.com/IgorCSilva/ruby_service_mesh/nginx_deployment/images/03_dockerhub_v1.png)
+
+### Version 2
+Update the server code to use the version 2.
+
+In app/main.rb:
+
+```ruby
+require "sinatra"
+
+set :bind, "0.0.0.0"
+
+get "/" do
+  "Hello, world! V2"
+end
+
+```
+
+Then, follow the same steps before until publish image in dockerhub.
+
+Create the second version app image:  
+`docker build -t igoru23/ruby_sinatra:v2 .`
+
+Check if image is ok:  
+`docker run --rm -p 8080:4567 igoru23/ruby_sinatra:v2`
+
+Push image to dockerhub:  
+`docker push igoru23/ruby_sinatra:v2`
+
+The second image now is in dockerhub.
+
+
+![dockerhub app version 1](https://raw.githubusercontent.com/IgorCSilva/ruby_service_mesh/nginx_deployment/images/04_dockerhub_v2.png)
+
+## Update deployment
+Update deployment to include a service and use the app versions created.
+
+``` yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+spec:
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+        version: V1
+    spec:
+      containers:
+      - name: nginx
+        image: igoru23/ruby_sinatra:v1
+        resources:
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+        ports:
+        - containerPort: 4567
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-b
+spec:
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+        version: V2
+    spec:
+      containers:
+      - name: nginx
+        image: igoru23/ruby_sinatra:v2
+        resources:
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+        ports:
+        - containerPort: 4567
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: nginx
+  ports:
+  - port: 8000
+    targetPort: 4567
+    nodePort: 30000
+```
+<br>
+
+Apply the updated deployment:  
+`kubectl apply -f deployment.yaml`  
+
+Accessing `localhots:8000` the text Hello, world! V2 is showed.

@@ -18,4 +18,4 @@ RUN bundle install
 COPY . .
 
 # Keeps the container available.
-CMD ["tail", "-f", "/dev/null"]
+CMD ["ruby", "app/main.rb"]
