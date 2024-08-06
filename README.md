@@ -240,7 +240,7 @@ Push image to dockerhub:
 
 Now, you can see the app image in dockerhub.
 
-![dockerhub app version 1](https://raw.githubusercontent.com/IgorCSilva/ruby_service_mesh/nginx_deployment/images/03_dockerhub_v1.png)
+![dockerhub app version 1](https://raw.githubusercontent.com/IgorCSilva/ruby_service_mesh/app_versions/images/03_dockerhub_v1.png)
 
 ### Version 2
 Update the server code to use the version 2.
@@ -272,7 +272,7 @@ Push image to dockerhub:
 The second image now is in dockerhub.
 
 
-![dockerhub app version 1](https://raw.githubusercontent.com/IgorCSilva/ruby_service_mesh/nginx_deployment/images/04_dockerhub_v2.png)
+![dockerhub app version 1](https://raw.githubusercontent.com/IgorCSilva/ruby_service_mesh/app_versions/images/04_dockerhub_v2.png)
 
 ## Update deployment
 Update deployment to include a service and use the app versions created.
