@@ -349,3 +349,261 @@ Apply the updated deployment:
 `kubectl apply -f deployment.yaml`  
 
 Accessing `localhots:8000` the text Hello, world! V2 is showed.
+
+Run the following command to see how the requests are distributed:  
+`while true;do curl http://localhost:8000; echo; sleep 0.5; done;`
+
+Then access the Kiali dashboard:  
+`istioctl dashboard kiali`
+
+It is the requests to each server version:
+![canary deploy requests 50% 50%](https://raw.githubusercontent.com/IgorCSilva/ruby_service_mesh/canary_deploy/images/05_requests.png)
+
+# Canary Deploy
+Now we specify the quantity of each server version, just add `replicas: 8` in V1 and `replicas: 2` in V2:
+
+
+``` yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+spec:
+  replicas: 8
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+        version: V1
+    spec:
+      containers:
+      - name: nginx
+        image: igoru23/ruby_sinatra:v1
+        resources:
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+        ports:
+        - containerPort: 4567
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-b
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+        version: V2
+    spec:
+      containers:
+      - name: nginx
+        image: igoru23/ruby_sinatra:v2
+        resources:
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+        ports:
+        - containerPort: 4567
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: nginx
+  ports:
+  - port: 8000
+    targetPort: 4567
+    nodePort: 30000
+```
+
+Apply the new deployment:  
+`kubectl apply -f deployment.yaml`
+
+Check if pods are running:  
+`kubectl get po`
+
+Run requests again:  
+`while true;do curl http://localhost:8000; echo; sleep 0.5; done;`
+
+Then 80% of requests are sent to server version 1 and 20% to server version 2 as shown in image below:
+
+![canary deploy requests 80% 20%](https://raw.githubusercontent.com/IgorCSilva/ruby_service_mesh/canary_deploy/images/06_requests_80_20.png)
+
+## Automate Canary Deploy Creation
+
+<br>
+First set 1 replica to each version:  
+
+
+``` yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+        version: V1
+    spec:
+      containers:
+      - name: nginx
+        image: igoru23/ruby_sinatra:v1
+        resources:
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+        ports:
+        - containerPort: 4567
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-b
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+        version: V2
+    spec:
+      containers:
+      - name: nginx
+        image: igoru23/ruby_sinatra:v2
+        resources:
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+        ports:
+        - containerPort: 4567
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: nginx
+  ports:
+  - port: 8000
+    targetPort: 4567
+    nodePort: 30000
+```
+
+Apply the deployment:  
+`kubectl apply -f deployment.yaml`
+
+Send requests again:  
+`while true;do curl http://localhost:8000; echo; sleep 0.5; done;`  
+Now we have 50% of requests to each version.
+
+To change the traffic distribution click on service icon(triangle) with right button and choose `Details` option. After click on `Actions` box and then on `Traffic Shifiting`. On window that appear set 75% to version 1 and 25% to version 2.
+
+Stop the requests and now we will send requests using fortio.
+Apply the fortio:  
+`kubectl apply -f https://raw.githubusercontent.com/istio/istio/release-1.9/samples/httpbin/sample-client/fortio-deploy.yaml`
+
+Checking fortio pods:  
+`kubectl get po`
+
+Save fortion name in a variable:  
+`export FORTIO_POD=$(kubectl get pods -lapp=fortio -o 'jsonpath={.items[0].metadata.name}')`
+
+Run `echo $FORTIO_POD` and you will see the fortio pod name.
+
+Send requests:  
+`kubectl exec "$FORTIO_POD" -c fortio -- fortio load -c 2 -qps 0 -t 200s -loglevel Warning http://nginx-service:8000`
+
+Now we can see the distribution configuration that we set before.
+<br>
+
+![canary deploy requests 75% 25%](https://raw.githubusercontent.com/IgorCSilva/ruby_service_mesh/canary_deploy/images/07_fortio_requests_75_25.png)
+
+
+## Create Virtual Service and Destination Rule manually(recommended)
+
+Go to `Istio Config` session in Kiali page and delete the virtual service and destination rule just clicking on Actions button and selecting delete action.
+
+This way we have again 50% of the requests to each version of code.
+
+Create the virtual service file:
+- manifests/vs.yaml
+```yaml
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: nginx-vs
+spec:
+  hosts:
+  - nginx-service
+  http:
+    - route:
+      - destination:
+          host: nginx-service
+          subset: v1
+        weight: 90 # 90% of requests
+      - destination:
+          host: nginx-service
+          subset: v2
+        weight: 10 # 10% of requests
+```
+
+<br>Create the destination rule file:
+- manifests/dr.yaml
+```yaml
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: nginx-dr
+spec:
+  host: nginx-service
+  subsets:
+    - name: v1
+      labels:
+        version: V1
+    - name: v2
+      labels:
+        version: V2
+```
+
+Then, apply both:  
+`kubectl apply -f dr.yaml`  
+`kubectl apply -f vs.yaml`
+
+Now, send requests again:  
+`kubectl exec "$FORTIO_POD" -c fortio -- fortio load -c 2 -qps 0 -t 200s -loglevel Warning http://nginx-service:8000`
+
+And we can see the correct distribution:
+
+
+![canary deploy requests 90% 10%](https://raw.githubusercontent.com/IgorCSilva/ruby_service_mesh/canary_deploy/images/08_requests_90_10.png)
