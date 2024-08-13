@@ -731,3 +731,73 @@ Now, apply the manifests:
 
 This way you have now the load balancers defined in your destination rule.
 
+# Stick session with consistent hash
+
+The Stick session is used to ensure that the user always accesses the version of the application that they accessed for the first time, preventing them from changing versions with each request, thereby changing the content of the page or the response they receive. This basically works by the load balancer knowing which client it is and redirecting it to the correct version.
+
+## Consistent Hash
+
+If we have a Service redirecting to two versions of an application, sometimes we will be redirected to the first, sometimes to the second.
+We can make the service use certain information to always redirect to the same version.
+Consistent hashing does not work when we are working with weight (80% of requests for version V1, 20% for version V2). When we work with the Virtual Service we must have only one subset that will send to the destination rule, which will also have only one subset. This is something Istio has yet to implement.
+
+We can use Consistent Hash in a few ways, using:
+
+* httpHeaderName - use the header to generate a hash;
+* httpCookie - use cookies to generate a hash;
+* UseSourceId - use ip address to generate a hash;
+* httpQueryParameterName - use the query parameters to generate a hash.
+
+Create the consistent hash file:
+
+- manifests/consistent-hash.yaml
+```yaml
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: nginx-vs
+spec:
+  hosts:
+  - nginx-service
+  http:
+    - route:
+      - destination:
+          host: nginx-service
+          subset: all
+
+---
+
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: nginx-dr
+spec:
+  host: nginx-service
+  trafficPolicy:
+    loadBalancer:
+      consistentHash:
+        httpHeaderName: "x-user"
+  subsets:
+    - name: all
+      labels:
+        app: nginx # get all pods with nginx.
+```
+
+Apply the configuration:  
+`kubectl apply -f consistent-hash.yaml`
+
+Then, check if it works:  
+- First, list the pods: `kubectl get pods`.
+- Second, choose one pod and get inside it: `kubectl exec -it nginx-b-758cf5597d-ff82x -- bash`
+
+- Now, inside the pod, execute `curl http://nginx-service:8000` many times. Note that the response changes.
+
+  ![consistent-hash different responses](https://raw.githubusercontent.com/IgorCSilva/ruby_service_mesh/consistent_hash/images/09_consistent_hash_1.png)
+
+- Finally, set the header information defined in consistent-hash file and the same response will be returned: `curl --header "x-user: igor" http://nginx-service:8000`
+
+
+  ![consistent-hash same responses](https://raw.githubusercontent.com/IgorCSilva/ruby_service_mesh/consistent_hash/images/10_consistent_hash_2.png)
+
+
+
