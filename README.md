@@ -607,3 +607,127 @@ And we can see the correct distribution:
 
 
 ![canary deploy requests 90% 10%](https://raw.githubusercontent.com/IgorCSilva/ruby_service_mesh/canary_deploy/images/08_requests_90_10.png)
+
+# Load Balancer
+Here we have 3 kinds of load balancers:
+
+- **ROUND_ROBIN**:
+    How it works: This is one of the simplest load balancing algorithms. Requests are distributed evenly across all available servers in a rotating manner. For example, if there are three servers (A, B, and C), the first request goes to A, the second to B, the third to C, and the fourth request starts again with A.  
+
+    **Pros**: Simple to implement and understand. Fairly evenly distributes load if all servers have similar capacity and performance.  
+    **Cons**: Doesn’t account for the current load or capacity of each server, so it might send a lot of traffic to a server that's already busy.
+
+- **RANDOM**:
+    How it works: Requests are distributed to servers based on a random selection. Each request has an equal chance of being sent to any of the available servers.  
+
+    **Pros**: Simple and easy to implement. Can work well if all servers have similar performance and capacity.  
+    **Cons**: Like ROUND_ROBIN, it doesn’t consider the current load or capacity of the servers, so it can lead to uneven distribution of requests.
+
+- **LEAST_CONN**:
+  How it works: This algorithm directs the request to the server with the fewest active connections at the time of the request. It helps to balance the load based on the current server load.  
+
+  **Pros**: More dynamic and responsive to the current load on each server. Can lead to better performance and more efficient use of server resources compared to ROUND_ROBIN and RANDOM.  
+  **Cons**: Slightly more complex to implement and might involve overhead in tracking the number of active connections for each server.
+
+
+Update the replicas in deployment file (V1 -> 8 and V2 -> 18) and define the load balancer in destination rule file:
+
+- manifest/deployment.yaml
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+spec:
+  replicas: 8
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+        version: V1
+    spec:
+      containers:
+      - name: nginx
+        image: igoru23/ruby_sinatra:v1
+        resources:
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+        ports:
+        - containerPort: 4567
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-b
+spec:
+  replicas: 18
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+        version: V2
+    spec:
+      containers:
+      - name: nginx
+        image: igoru23/ruby_sinatra:v2
+        resources:
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+        ports:
+        - containerPort: 4567
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: nginx
+  ports:
+  - port: 8000
+    targetPort: 4567
+    nodePort: 30000
+```
+
+- manifests/dr.yaml
+```yaml
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: nginx-dr
+spec:
+  host: nginx-service
+  trafficPolicy: # Define global subset load balancer.
+    loadBalancer:
+      simple: ROUND_ROBIN
+  subsets:
+    - name: v1
+      labels:
+        version: V1
+      trafficPolicy: # Define specific subset load balancer.
+        loadBalancer:
+          simple: LEAST_CONN
+    - name: v2
+      labels:
+        version: V2
+```
+
+Now, apply the manifests:  
+`kubectl apply -f deployment.yaml`
+`kubectl apply -f dr.yaml`
+
+This way you have now the load balancers defined in your destination rule.
+
