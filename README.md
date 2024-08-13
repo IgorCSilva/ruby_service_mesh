@@ -800,4 +800,89 @@ Then, check if it works:
   ![consistent-hash same responses](https://raw.githubusercontent.com/IgorCSilva/ruby_service_mesh/consistent_hash/images/10_consistent_hash_2.png)
 
 
+# Fault Injection
 
+We use fault injection to simulate system fails.
+
+## Apply delay
+
+Let's apply 10 seconds delay for each request.
+
+Create fault injection file:
+- manifests/fault-injection.yaml
+```yaml
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: nginx-vs
+spec:
+  hosts:
+  - nginx-service
+  http:
+    - fault:
+        delay:
+          fixedDelay: 10s
+          percentage:
+            value: 100 # 100% of requests.
+      route:
+      - destination:
+          host: nginx-service
+          subset: all
+---
+
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: nginx-dr
+spec:
+  host: nginx-service
+  trafficPolicy:
+    loadBalancer:
+      consistentHash:
+        httpHeaderName: "x-user"
+  subsets:
+    - name: all
+      labels:
+        app: nginx # get all pods with nginx.
+```
+
+Apply the manisfest:  
+`kubectl apply -f fault-injection.yaml`
+
+Test with fortio:  
+`kubectl exec "$FORTIO_POD" -c fortio -- fortio load -c 2 -qps 0 -t 10s -loglevel Warning -timeout 20s http://nginx-service:8000`
+
+Fortio response looks like this:  
+```
+# target 50% 10.0048
+# target 75% 10.0048
+# target 90% 10.0048
+# target 99% 10.0048
+# target 99.9% 10.0048
+```
+
+## Inject fails
+
+To do this, add the `abort` information in manifest file, in `fault` attribute:  
+<br>
+```yaml
+abort:
+    httpStatus: 500
+    percentage:
+        value: 100
+```
+<br>
+
+Apply the manisfest again:  
+`kubectl apply -f fault-injection.yaml`
+
+Therefore, when making requests with fortio we receive the defined error.
+
+`kubectl exec "$FORTIO_POD" -c fortio -- fortio load -c 2 -qps 0 -t 200s -loglevel Warning http://nginx-service:8000`
+
+
+![fault injection - request error](https://raw.githubusercontent.com/IgorCSilva/ruby_service_mesh/fault_injection/images/11_fault_injection.png)
+
+We can set fault injection directly in kiali, but it is recommended to work with the manifest files to have greater control of what we are doing.
+
+Finish deleting the manifest: `kubectl delete -f fault-injection.yaml`
